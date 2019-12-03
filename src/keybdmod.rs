@@ -26,7 +26,7 @@ fn lookup(s: char) -> KeyboardKey {
   }
 }
 
-pub fn type_it(s: &str) {
+pub fn type_it(s: &str, add_nl: bool) {
   let mut kb = KeyBondingInstance::new().unwrap();
   
   println!("got s: {}, len: {}", s, s.len());
@@ -40,6 +40,15 @@ pub fn type_it(s: &str) {
   for c in s.chars() {
     println!("{} => {:?}", c, lookup(c));
     kb.add_key(lookup(c));
+    // pushing more than 3 doesn't work??
+    kb.launching();
+    kb.clear();
+  }
+
+  if add_nl {
+    kb.add_key(KeyENTER);
+    kb.launching();
+    kb.clear();
   }
 
 //  kb.has_shift(true);
@@ -47,5 +56,4 @@ pub fn type_it(s: &str) {
 //  kb.launching();
 //  kb.clear();
 //  kb.has_shift(false);
-  kb.launching();
 }

@@ -16,25 +16,18 @@ use iron::prelude::*;
 use iron::Handler;
 use iron::status;
 use iron::typemap::Key;
+use iron::error::IronError;
+use iron::middleware::{BeforeMiddleware, AfterMiddleware};
 
 mod keybdmod;
 use keybdmod::*;
 
-/*
-enum Roc {
-  Chain,
-  Handler
-}
-*/
-  
 struct Router {
     // Routes here are simply matched with the url path.
     //routes: HashMap<String, Box<dyn Handler>>,
     routes: HashMap<String, Box<dyn Handler>>,
     //cnt: i32
 }
-
-//static mut kb:<KeyBondingInstance>=None;
 
 #[derive(Copy, Clone)]
 pub struct HitCounter;
@@ -99,7 +92,6 @@ fn hello(req: &mut Request) -> IronResult<Response> {
   println!("/");
   println!("{}", *count);
   *count +=1;
-//  Ok(Response::with((status::Ok, "Hello World!")))
   Ok(Response::with((status::Ok, "Hello world from fun!")))
 }
 
@@ -112,17 +104,69 @@ fn hello3(req: &mut Request) -> IronResult<Response> {
   // needs time?
 //  sleep(Duration::from_secs(3));
 //  println!("waited 3");
-  type_it("5123");
+  //type_it("5123", true);
 
 //  Ok(Response::with((status::Ok, "Hello World!")))
   Ok(Response::with((status::Ok, "Hello world from fun!")))
 }
 
-fn baas(_: &mut Request) -> IronResult<Response> {
+
+fn rh_baas(_: &mut Request) -> IronResult<Response> {
   Ok(Response::with((status::Ok, "Baas !")))
 }
 
 
+struct KeybMiddleware { }
+
+impl KeybMiddleware {
+  fn new() -> (KeybMiddleware, KeybMiddleware) {
+    println!("create new keyb_middle_ware");
+    // TODO why does middleware needs to return tupple?
+    (KeybMiddleware{}, KeybMiddleware{})
+  }
+}
+
+impl BeforeMiddleware for KeybMiddleware {
+  fn before(&self, request: &mut Request) -> IronResult<()> {
+    //do nothing
+    Ok(())
+  }
+  
+  fn catch(&self, request: &mut Request, err: IronError) -> IronResult<()> {
+    Err(err) 
+  }
+}
+
+impl AfterMiddleware for KeybMiddleware {
+  fn after(&self, req: &mut Request, res: Response) -> IronResult<Response> {
+    println!("{:?}", req.url.query());
+    //let qd = parse_query_to_dict(req.url.query().unwrap_expect("NO VALID QUERY !"));
+    let qd = parse_query_to_dict(req.url.query().unwrap());
+    println!("{:?}", qd);
+    //type_it("5123");
+    type_it(qd.get("cmd").unwrap_or(&""), true);
+
+    // forward response 
+    Ok(res)
+  }
+
+  fn catch(&self, request: &mut Request, err: IronError) -> IronResult<Response> {
+    Err(err) 
+  }
+}
+/*
+fn keyb_chain(req: &mut Request) -> Chain {
+  println!("keyb_chain");
+  // seems weird cause response is already send?
+//  Ok(Response::with((status::Ok, "Baas !")))
+
+  //return chain
+  Chain:new(|_: &mut Request| { 
+  // seems weird cause response is already send?
+    Ok(Response::with((status::Ok, "Baas !")))
+  }
+}
+*/
 
 fn main() {
     let mut router = Router::new();
@@ -136,7 +180,7 @@ fn main() {
         println!("/");
         println!("{}", *count);
         *count +=1;
-        Ok(Response::with((status::Ok, "Hello world !")))
+        Ok(Response::with((status::Ok, "chain a !")))
     });//.link(Write::<PersProp>::both(0));
     
     // add middleware;
@@ -146,17 +190,25 @@ fn main() {
       Ok(Response::with((status::Ok, "Hello Chain !")))
     });
 
+    let mut cmd_chain = Chain::new(|req: &mut Request| {
+      //fn parse_query_to_dict(q: &str) -> HashMap<&str,&str> {
+      Ok(Response::with((status::Ok, "cmd_chain !")))
+    });
+
+    cmd_chain.link(KeybMiddleware::new());
+
     // quick route
     router.add_route("az".to_string(), |_: &mut Request| {
         Ok(Response::with((status::Ok, "AZ !")))
     });
     
     // route defined in function
-    router.add_route("baas".to_string(), baas);
+    router.add_route("baas".to_string(), rh_baas);
     // chained as route, only one shackle... so chain not needed
     router.add_route("".to_string(), hello_chain);
     // chained as route, has a page counter
-    router.add_route("hello".to_string(), chain_a);
+    router.add_route("chain_a".to_string(), chain_a);
+    router.add_route("cmd".to_string(), cmd_chain);
 
 /*
     router.add_route("hello".to_string(), |request: &mut Request| {
@@ -195,7 +247,7 @@ fn main() {
 //      .link(Write::<HitCounter>::both(0));
 
     println!("Running on http://localhost:8080");
-    Iron::new(router).http("localhost:8080").unwrap();
+    Iron::new(router).http("0.0.0.0:8080").unwrap();
 //    Iron::new(chain_a).http("localhost:8080").unwrap();
 //    Iron::new(hello_chain).http("localhost:8080").unwrap();
     //Iron::new(chain3).http("localhost:8080").unwrap();
