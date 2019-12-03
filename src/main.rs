@@ -16,11 +16,20 @@ use iron::prelude::*;
 use iron::Handler;
 use iron::status;
 use iron::typemap::Key;
+
 mod keybdmod;
 use keybdmod::*;
 
+/*
+enum Roc {
+  Chain,
+  Handler
+}
+*/
+  
 struct Router {
     // Routes here are simply matched with the url path.
+    //routes: HashMap<String, Box<dyn Handler>>,
     routes: HashMap<String, Box<dyn Handler>>,
     //cnt: i32
 }
@@ -48,7 +57,6 @@ impl Router {
     fn new() -> Self {
         Router {
             routes: HashMap::new(),
- //           cnt: 10
         }
     }
 
@@ -63,7 +71,9 @@ impl Router {
 impl Handler for Router {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         match self.routes.get(&req.url.path().join("/")) {
-            Some(handler) => handler.handle(req),
+            Some(handler) => {
+              handler.handle(req)
+            },
             None => Ok(Response::with(status::NotFound)),
         }
     }
@@ -108,41 +118,47 @@ fn hello3(req: &mut Request) -> IronResult<Response> {
   Ok(Response::with((status::Ok, "Hello world from fun!")))
 }
 
+fn baas(_: &mut Request) -> IronResult<Response> {
+  Ok(Response::with((status::Ok, "Baas !")))
+}
+
+
 
 fn main() {
     let mut router = Router::new();
 //    type_az(1);
-   /* 
-    let mut chain = Chain::new(|_: &mut Request| {
+
+
+    let mut chain_a = Chain::new(|req: &mut Request| {
+        let mutex = req.get::<Write<HitCounter>>().unwrap();
+        let mut count = mutex.lock().unwrap();
+
         println!("/");
-        Ok(Response::with((status::Ok, "Hello world !")))
-    }).link(Write::<PersProp>::both(0));
-*/
- 
-    //let kb = KeyBondingInstance::new().unwrap();
-/*
-    let kb = match KeyBondingInstance::new() {
-      Ok(v) => { println!("got bonding"); Ok(v) },
-      Err(e) => { 
-          println!("failure: {}", e);
-          Err(e)
-        }, 
-    };
-
-    let mut kb = kb.unwrap();
-*/
-
-
-
-    router.add_route("".to_string(), hello);
-/*
-    router.add_route("".to_string(), |_: &mut Request| {
-        println!("/");
-//        println!("cnt:{}", router.cnt);
+        println!("{}", *count);
+        *count +=1;
         Ok(Response::with((status::Ok, "Hello world !")))
     });//.link(Write::<PersProp>::both(0));
-*/
+    
+    // add middleware;
+    chain_a.link(Write::<HitCounter>::both(10)); //both?? set variable
 
+    let mut hello_chain = Chain::new(|_: &mut Request| {
+      Ok(Response::with((status::Ok, "Hello Chain !")))
+    });
+
+    // quick route
+    router.add_route("az".to_string(), |_: &mut Request| {
+        Ok(Response::with((status::Ok, "AZ !")))
+    });
+    
+    // route defined in function
+    router.add_route("baas".to_string(), baas);
+    // chained as route, only one shackle... so chain not needed
+    router.add_route("".to_string(), hello_chain);
+    // chained as route, has a page counter
+    router.add_route("hello".to_string(), chain_a);
+
+/*
     router.add_route("hello".to_string(), |request: &mut Request| {
 
         let keyval = parse_query_to_dict(request.url.query().unwrap()); // TODO do match
@@ -165,11 +181,11 @@ fn main() {
         println!("error");
         Ok(Response::with(status::BadRequest))
     });
+*/
 
 
     //let mut chain = Chain::new(hello);
-    let mut chain = Chain::new(hello);
-    chain.link(Write::<HitCounter>::both(10)); //both?? set variable
+//    let mut chain = Chain::new(hello);
 
     let mut chain3 = Chain::new(hello3);
     //chain3.link(Read::<RouteProperties>::both("biebop".to_string())); //both?? set variable
@@ -179,7 +195,9 @@ fn main() {
 //      .link(Write::<HitCounter>::both(0));
 
     println!("Running on http://localhost:8080");
-    //Iron::new(router).http("localhost:8080").unwrap();
-    Iron::new(chain3).http("localhost:8080").unwrap();
+    Iron::new(router).http("localhost:8080").unwrap();
+//    Iron::new(chain_a).http("localhost:8080").unwrap();
+//    Iron::new(hello_chain).http("localhost:8080").unwrap();
+    //Iron::new(chain3).http("localhost:8080").unwrap();
 
 }
