@@ -8,12 +8,16 @@ extern crate persistent;
 use std::collections::HashMap;
 use keybd_event::KeyboardKey::*;
 use keybd_event::KeyBondingInstance;
-use persistent::Write;
+use persistent::{Write,Read};
+use std::thread::sleep;
+use std::time::Duration;
 
 use iron::prelude::*;
 use iron::Handler;
 use iron::status;
 use iron::typemap::Key;
+mod keybdmod;
+use keybdmod::*;
 
 struct Router {
     // Routes here are simply matched with the url path.
@@ -24,9 +28,21 @@ struct Router {
 //static mut kb:<KeyBondingInstance>=None;
 
 #[derive(Copy, Clone)]
-pub struct pers_prop;
+pub struct HitCounter;
+impl Key for HitCounter { type Value = usize; }
 
-impl Key for pers_prop { type Value = usize; }
+#[derive(Copy, Clone)]
+pub struct RouteProperties;
+//impl Key for RouteProperties { type Value = KeyBondingInstance; }
+//impl Key for RouteProperties { type Value = String; }
+impl Key for RouteProperties { type Value = Mytype; }
+
+pub struct Mytype {
+  m: u32,
+  s: String
+//  k: KeyBondingInstance 
+// not thread safe!?
+}
 
 impl Router {
     fn new() -> Self {
@@ -67,26 +83,56 @@ fn parse_query_to_dict(q: &str) -> HashMap<&str,&str> {
   res
 }
 
-fn hello(_: &mut Request) -> IronResult<Response> {
+fn hello(req: &mut Request) -> IronResult<Response> {
+  let mutex = req.get::<Write<HitCounter>>().unwrap();
+  let mut count = mutex.lock().unwrap();
   println!("/");
+  println!("{}", *count);
+  *count +=1;
 //  Ok(Response::with((status::Ok, "Hello World!")))
   Ok(Response::with((status::Ok, "Hello world from fun!")))
 }
 
+fn hello3(req: &mut Request) -> IronResult<Response> {
+  let arc = req.get::<Read<RouteProperties>>().unwrap();
+  let props = arc.as_ref();
+  println!("/");
+  println!("m: {}, s: {}", props.m, props.s);
+
+  // needs time?
+//  sleep(Duration::from_secs(3));
+//  println!("waited 3");
+  type_it("5123");
+
+//  Ok(Response::with((status::Ok, "Hello World!")))
+  Ok(Response::with((status::Ok, "Hello world from fun!")))
+}
+
+
 fn main() {
     let mut router = Router::new();
-    let mut kb = KeyBondingInstance::new().unwrap();
+//    type_az(1);
    /* 
     let mut chain = Chain::new(|_: &mut Request| {
         println!("/");
         Ok(Response::with((status::Ok, "Hello world !")))
-    }).link(Write::<pers_prop>::both(0));
+    }).link(Write::<PersProp>::both(0));
 */
-  
-    kb = KeyBondingInstance::new().unwrap();
-    kb.has_shift(true);
-    kb.add_keys(&[KeyA, KeyZ]);
-    kb.launching();
+ 
+    //let kb = KeyBondingInstance::new().unwrap();
+/*
+    let kb = match KeyBondingInstance::new() {
+      Ok(v) => { println!("got bonding"); Ok(v) },
+      Err(e) => { 
+          println!("failure: {}", e);
+          Err(e)
+        }, 
+    };
+
+    let mut kb = kb.unwrap();
+*/
+
+
 
     router.add_route("".to_string(), hello);
 /*
@@ -94,7 +140,7 @@ fn main() {
         println!("/");
 //        println!("cnt:{}", router.cnt);
         Ok(Response::with((status::Ok, "Hello world !")))
-    });//.link(Write::<pers_prop>::both(0));
+    });//.link(Write::<PersProp>::both(0));
 */
 
     router.add_route("hello".to_string(), |request: &mut Request| {
@@ -120,6 +166,20 @@ fn main() {
         Ok(Response::with(status::BadRequest))
     });
 
+
+    //let mut chain = Chain::new(hello);
+    let mut chain = Chain::new(hello);
+    chain.link(Write::<HitCounter>::both(10)); //both?? set variable
+
+    let mut chain3 = Chain::new(hello3);
+    //chain3.link(Read::<RouteProperties>::both("biebop".to_string())); //both?? set variable
+    chain3.link(Read::<RouteProperties>::both(Mytype { m: 2, s: "biebop".to_string()})); //both?? set variable
+//  Why doesn't this work?
+//    let mut chain2 = (Chain::new(hello))
+//      .link(Write::<HitCounter>::both(0));
+
     println!("Running on http://localhost:8080");
-    Iron::new(router).http("localhost:8080").unwrap();
+    //Iron::new(router).http("localhost:8080").unwrap();
+    Iron::new(chain3).http("localhost:8080").unwrap();
+
 }
